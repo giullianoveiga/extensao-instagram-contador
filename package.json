@@ -1,0 +1,65 @@
+{
+  "name": "instagram-comment-counter-bo",
+  "version": "1.0.0",
+  "description": "Extensão Chrome para contar comentários com @ em posts do Instagram - Campanha B&O",
+  "main": "popup.js",
+  "scripts": {
+    "build": "echo 'Extensão pronta para uso!'",
+    "test": "echo 'Testes não implementados ainda'",
+    "dev": "echo 'Para desenvolvimento, carregue a extensão no Chrome'",
+    "package": "echo 'Para empacotar, use o Chrome Developer Dashboard'"
+  },
+  "keywords": [
+    "chrome-extension",
+    "instagram",
+    "comment-counter",
+    "social-media",
+    "analytics",
+    "b&o",
+    "ranking"
+  ],
+  "author": "Equipe B&O",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "local"
+  },
+  "bugs": {
+    "url": "mailto:suporte@bo.com"
+  },
+  "homepage": ".",
+  "engines": {
+    "chrome": ">=88.0.0"
+  },
+  "manifest": {
+    "version": 3,
+    "permissions": [
+      "activeTab",
+      "storage",
+      "downloads"
+    ],
+    "host_permissions": [
+      "https://www.instagram.com/*"
+    ]
+  },
+  "devDependencies": {},
+  "dependencies": {},
+  "files": [
+    "manifest.json",
+    "popup.html",
+    "popup.js",
+    "content.js",
+    "background.js",
+    "styles.css",
+    "icons/",
+    "README.md",
+    "INSTALACAO.md"
+  ],
+  "chrome-extension": {
+    "type": "browser-extension",
+    "platform": "chrome",
+    "manifest-version": 3,
+    "target-audience": "internal-business-use",
+    "category": "social-media-tools"
+  }
+}
