@@ -191,6 +191,12 @@ Extensão Instagram/
 - Exportação CSV/Excel
 - Interface responsiva
 
+### v1.1.0
+
+- **Divisão de Resultados**: Os valores exibidos no popup agora são divididos por 2 para atender a uma nova regra de cálculo.
+- **Botão de Limpar Resultados**: Adicionado botão para limpar os resultados diretamente no popup.
+- **Melhorias na Interface**: Ajustes visuais e feedbacks mais claros para o usuário.
+
 ## 🤝 Suporte
 
 Para suporte técnico ou dúvidas sobre a extensão:
@@ -206,3 +212,10 @@ Esta extensão foi desenvolvida especificamente para apoiar a campanha de engaja
 ---
 
 **Desenvolvido para a campanha B&O Instagram 2025** 🏆
+
+### Como Funciona a Contagem
+
+- A contagem é realizada diretamente através do código fonte da página do Instagram.
+- Apenas menções válidas (@username) são contabilizadas, seguindo critérios rigorosos de validação.
+- Menções são extraídas de elementos HTML específicos que indicam claramente o uso de @ como menção.
+- Comentários duplicados ou inválidos são ignorados para garantir precisão nos resultados.

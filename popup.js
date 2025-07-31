@@ -12,6 +12,13 @@ class InstagramCommentCounter {
         document.getElementById('scanButton').addEventListener('click', () => this.scanComments());
         document.getElementById('exportExcel').addEventListener('click', () => this.exportToExcel());
         document.getElementById('exportCSV').addEventListener('click', () => this.exportToCSV());
+        document.getElementById('clearResultsButton').addEventListener('click', () => {
+            document.getElementById('ranking').innerHTML = '';
+            document.getElementById('totalComments').classList.add('hidden');
+            document.getElementById('status').classList.add('hidden');
+            document.getElementById('status').textContent = '';
+            alert('Resultados limpos com sucesso!');
+        });
     }
 
     async loadSavedData() {
@@ -88,59 +95,33 @@ class InstagramCommentCounter {
             // Aguardar um pouco antes de injetar o script
             await new Promise(resolve => setTimeout(resolve, 1000));
 
-            // Injetar e executar o script de análise
+            // Injetar e executar o script de análise com scroll automático
             const results = await chrome.scripting.executeScript({
                 target: { tabId: tab.id },
                 func: () => {
-                    // Função de análise injetada diretamente na página
-                    const mentions = new Map();
-                    let totalComments = 0;
-                    const processedTexts = new Set();
-
-                    try {
-                        console.log('[B&O Extension] Iniciando análise da página...');
-                        
-                        // Aguardar um pouco para garantir carregamento
-                        if (document.readyState !== 'complete') {
-                            console.log('[B&O Extension] Página ainda carregando...');
-                        }
-
-                        // Seletores mais abrangentes para diferentes layouts do Instagram
-                        const commentSelectors = [
-                            // Seletores específicos para comentários
+                    const scrollAndCollectComments = async () => {
+                        const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+                        const selectors = [
                             'article span[dir="auto"]',
                             'div[data-testid*="comment"] span',
                             'div[role="dialog"] span[dir="auto"]',
-                            // Seletores gerais para spans com texto
                             'span[dir="auto"]',
                             'div[role="button"] span',
-                            // Fallbacks para diferentes estruturas
                             'div[style*="word-wrap"] span',
                             'span:not([aria-label]):not([role])',
-                            // Seletores alternativos
                             'div > span > span',
-                            'ul li span[dir="auto"]'
+                            'ul li span[dir="auto"]',
+                            'div[aria-label="Comentários"] span',
+                            'ul li div[role="menuitem"] span', // Comentários principais
+                            'div[role="dialog"] ul li div[role="menuitem"] span', // Comentários em diálogos
+                            'article ul li div[role="menuitem"] span', // Comentários em posts
+                            'div[aria-label="Comentários"] ul li div[role="menuitem"] span' // Fallback para comentários
                         ];
 
-                        let allElements = [];
-                        let selectorStats = {};
-                        
-                        // Tentar todos os seletores e coletar elementos
-                        commentSelectors.forEach(selector => {
-                            try {
-                                const elements = Array.from(document.querySelectorAll(selector));
-                                selectorStats[selector] = elements.length;
-                                allElements = allElements.concat(elements);
-                            } catch (e) {
-                                console.log(`[B&O Extension] Seletor falhou: ${selector}`, e);
-                            }
-                        });
+                        const mentions = new Map();
+                        let totalComments = 0;
 
-                        console.log('[B&O Extension] Elementos encontrados por seletor:', selectorStats);
-                        console.log(`[B&O Extension] Total de elementos coletados: ${allElements.length}`);
-
-                        // Função para validar comentários
-                        function isValidComment(text) {
+                        const isValidComment = (text) => {
                             const invalidPatterns = [
                                 /^(curtir|like|seguir|follow|responder|reply)$/i,
                                 /^(há \d+|ago|\d+ min)$/i,
@@ -151,19 +132,10 @@ class InstagramCommentCounter {
                                 /^(comentários|comments)$/i
                             ];
 
-                            if (text.length < 3 || invalidPatterns.some(pattern => pattern.test(text))) {
-                                return false;
-                            }
+                            return text.length >= 3 && !invalidPatterns.some(pattern => pattern.test(text)) && /[a-zA-ZÀ-ÿ]/.test(text);
+                        };
 
-                            if (!/[a-zA-ZÀ-ÿ]/.test(text)) {
-                                return false;
-                            }
-
-                            return true;
-                        }
-
-                        // Função para validar usernames
-                        function isValidUsername(username) {
+                        const isValidUsername = (username) => {
                             const invalidPatterns = [
                                 /^(instagram|insta|official|page)$/i,
                                 /^[._]+$/,
@@ -173,69 +145,66 @@ class InstagramCommentCounter {
                             ];
 
                             return !invalidPatterns.some(pattern => pattern.test(username));
-                        }
+                        };
 
-                        // Filtrar e processar elementos únicos
-                        const uniqueTexts = new Set();
-                        allElements.forEach(element => {
-                            try {
-                                const text = element.textContent?.trim();
-                                if (!text || text.length < 3) return;
-                                
-                                // Evitar duplicatas de texto
-                                if (uniqueTexts.has(text)) return;
-                                uniqueTexts.add(text);
+                        const clickLoadMoreButton = async () => {
+                            const loadMoreButton = document.querySelector('button[aria-label="Carregar mais comentários"]');
+                            if (loadMoreButton) {
+                                loadMoreButton.click();
+                                await delay(2000); // Aguardar carregamento
+                            }
+                        };
 
-                                // Validar se é um comentário válido
-                                if (isValidComment(text)) {
-                                    totalComments++;
-                                    
-                                    // Buscar por menções @ no texto
-                                    const mentionRegex = /@([a-zA-Z0-9._]+)/g;
-                                    let match;
-                                    
-                                    while ((match = mentionRegex.exec(text)) !== null) {
-                                        const username = match[1].toLowerCase();
-                                        
-                                        // Filtrar menções válidas
-                                        if (isValidUsername(username)) {
-                                            const count = mentions.get(username) || 0;
-                                            mentions.set(username, count + 1);
-                                            console.log(`[B&O Extension] Menção encontrada: @${username} no texto: "${text.substring(0, 50)}..."`);
+                        const collectComments = () => {
+                            const processedComments = new Set(); // Armazena comentários únicos para evitar duplicação global
+
+                            selectors.forEach((selector, index) => {
+                                const elements = document.querySelectorAll(selector);
+                                console.log(`[B&O Extension] Seletor ${index + 1} encontrou ${elements.length} elementos.`);
+
+                                elements.forEach(element => {
+                                    const text = element.textContent?.trim();
+                                    if (!text || processedComments.has(text)) return; // Ignorar comentários já processados globalmente
+
+                                    processedComments.add(text); // Adicionar comentário ao conjunto de processados
+
+                                    if (isValidComment(text)) {
+                                        totalComments++;
+                                        const mentionRegex = /@([a-zA-Z0-9._]{2,30})/g;
+                                        let match;
+
+                                        while ((match = mentionRegex.exec(text)) !== null) {
+                                            const username = match[1].toLowerCase();
+                                            if (isValidUsername(username)) {
+                                                mentions.set(username, (mentions.get(username) || 0) + 1);
+                                                console.log(`[B&O Extension] Menção capturada: @${username} no texto: "${text}"`);
+                                            }
                                         }
                                     }
-                                }
+                                });
+                            });
+                        };
 
-                            } catch (error) {
-                                console.log('[B&O Extension] Erro ao processar elemento:', error);
-                            }
-                        });
+                        let lastHeight = 0;
+                        while (true) {
+                            await clickLoadMoreButton();
+                            collectComments();
+                            window.scrollTo(0, document.body.scrollHeight);
+                            await delay(1000);
 
-                        const sortedMentions = Object.fromEntries(
-                            Array.from(mentions.entries()).sort((a, b) => b[1] - a[1])
-                        );
-
-                        console.log('[B&O Extension] Análise concluída:', {
-                            totalComments,
-                            uniqueMentions: mentions.size,
-                            topMentions: Object.entries(sortedMentions).slice(0, 5)
-                        });
+                            const newHeight = document.body.scrollHeight;
+                            if (newHeight === lastHeight) break;
+                            lastHeight = newHeight;
+                        }
 
                         return {
-                            mentions: sortedMentions,
-                            totalComments: totalComments,
+                            mentions: Object.fromEntries([...mentions.entries()].sort((a, b) => b[1] - a[1])),
+                            totalComments,
                             success: true
                         };
+                    };
 
-                    } catch (error) {
-                        console.error('[B&O Extension] Erro na extração:', error);
-                        return { 
-                            mentions: {}, 
-                            totalComments: 0, 
-                            success: false,
-                            error: error.message 
-                        };
-                    }
+                    return scrollAndCollectComments();
                 }
             });
 
@@ -243,14 +212,14 @@ class InstagramCommentCounter {
 
             if (results && results[0] && results[0].result) {
                 const result = results[0].result;
-                
+
                 if (!result.success) {
                     this.showStatus(`❌ Erro na análise: ${result.error || 'Erro desconhecido'}`, 'error');
                     return;
                 }
 
                 const { mentions, totalComments } = result;
-                
+
                 if (totalComments === 0) {
                     this.showStatus('❌ Nenhum comentário encontrado. Verifique se está em um post com comentários.', 'error');
                     return;
@@ -259,16 +228,16 @@ class InstagramCommentCounter {
                 // Atualizar dados
                 this.updateRankings(mentions);
                 this.totalComments = totalComments;
-                
+
                 // Salvar dados
                 await this.saveData();
-                
+
                 // Atualizar interface
                 this.updateRankingDisplay();
                 this.updateExportButtons();
-                
+
                 this.showStatus(`✅ Scan concluído! ${totalComments} comentários analisados`, 'success');
-                
+
             } else {
                 this.showStatus('❌ Erro ao executar script de análise. Tente recarregar a página.', 'error');
             }
@@ -294,7 +263,7 @@ class InstagramCommentCounter {
     updateRankingDisplay() {
         const rankingDiv = document.getElementById('ranking');
         const totalDiv = document.getElementById('totalComments');
-        
+
         if (this.rankings.size === 0) {
             rankingDiv.innerHTML = '<p style="text-align: center; color: #8e8e8e;">Nenhum dado disponível</p>';
             totalDiv.classList.add('hidden');
@@ -308,7 +277,7 @@ class InstagramCommentCounter {
 
         const totalMentions = Array.from(this.rankings.values()).reduce((sum, count) => sum + count, 0);
         
-        totalDiv.textContent = `Total: ${totalMentions} menções em ${this.totalComments} comentários`;
+        totalDiv.textContent = `Total: ${Math.floor(totalMentions / 2)} menções em ${Math.floor(this.totalComments / 2)} comentários`;
         totalDiv.classList.remove('hidden');
 
         rankingDiv.innerHTML = sortedRankings.map(([username, count], index) => {
@@ -316,7 +285,7 @@ class InstagramCommentCounter {
             return `
                 <div class="ranking-item">
                     <span>${medal} <span class="username">@${username}</span></span>
-                    <span class="count">${count}</span>
+                    <span class="count">${Math.floor(count / 2)}</span>
                 </div>
             `;
         }).join('');

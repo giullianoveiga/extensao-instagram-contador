@@ -143,6 +143,20 @@
         </div>
     </div>
 
+    <div class="section">
+        <div class="section-title">🧹 Limpar Resultados</div>
+        <button id="clearResultsButton">Limpar</button>
+    </div>
+
     <script src="popup.js"></script>
+    <script>
+        document.getElementById('clearResultsButton').addEventListener('click', () => {
+            document.getElementById('ranking').innerHTML = '';
+            document.getElementById('totalComments').classList.add('hidden');
+            document.getElementById('status').classList.add('hidden');
+            document.getElementById('status').textContent = '';
+            alert('Resultados limpos com sucesso!');
+        });
+    </script>
 </body>
 </html>
